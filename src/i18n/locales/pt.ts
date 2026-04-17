@@ -82,6 +82,24 @@ const pt: Translation = {
     generic: 'Ocorreu um erro. Por favor, tente novamente.',
     linkNotFound: 'Link não encontrado.',
   },
+  home: {
+    badge: 'Encurtador de links com controle de expiração',
+    headlinePart1: 'Links curtos.',
+    headlinePart2: 'Expiração real.',
+    subtitle: 'Crie links curtos que expiram automaticamente. Rastreie cliques, gere QR codes e mantenha controle total — tudo em um painel.',
+    ctaNote: 'Sem cartão de crédito · Plano gratuito inclui 10 links',
+    feature1Title: 'Controle de expiração',
+    feature1Desc: 'Configure links para expirar em minutos, dias ou meses. Eles param de funcionar automaticamente.',
+    feature2Title: 'Rastreamento de cliques',
+    feature2Desc: 'Veja quantas vezes cada link foi acessado e quando foi o último acesso.',
+    feature3Title: 'QR Code incluído',
+    feature3Desc: 'Todo link curto vem com um QR code pronto para download e compartilhamento.',
+    themeLight: 'Claro',
+    themeDark: 'Escuro',
+    themeSystem: 'Sistema',
+    loginRequired: 'Login necessário · plano gratuito inclui 10 links',
+    footer: 'Construído com Firebase & React',
+  },
 }
 
 export default pt

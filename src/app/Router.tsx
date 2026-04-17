@@ -8,59 +8,42 @@ import ExpiredLinkPage from '@/pages/ExpiredLinkPage'
 
 function ProtectedRoute() {
   const { user, loading } = useAuth()
-
-  if (loading) {
-    return (
-      <div className="flex min-h-svh items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
-      </div>
-    )
-  }
-
-  if (!user) return <Navigate to="/auth" replace />
+  if (loading) return <FullPageSpinner />
+  if (!user) return <Navigate to="/" replace />
   return <Outlet />
 }
 
-function GuestRoute() {
+function HomeRoute() {
   const { user, loading } = useAuth()
-
-  if (loading) {
-    return (
-      <div className="flex min-h-svh items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
-      </div>
-    )
-  }
-
+  if (loading) return <FullPageSpinner />
   if (user) return <Navigate to="/dashboard" replace />
   return <Outlet />
 }
 
+function FullPageSpinner() {
+  return (
+    <div className="flex min-h-svh items-center justify-center bg-[oklch(0.10_0.02_280)]">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
+    </div>
+  )
+}
+
 export const router = createBrowserRouter([
   {
-    path: '/',
-    element: <HomePage />,
+    element: <HomeRoute />,
+    children: [
+      { path: '/', element: <HomePage /> },
+      { path: '/auth', element: <AuthPage /> },
+    ],
   },
   {
     path: '/expired',
     element: <ExpiredLinkPage />,
   },
   {
-    element: <GuestRoute />,
-    children: [
-      {
-        path: '/auth',
-        element: <AuthPage />,
-      },
-    ],
-  },
-  {
     element: <ProtectedRoute />,
     children: [
-      {
-        path: '/dashboard',
-        element: <DashboardPage />,
-      },
+      { path: '/dashboard', element: <DashboardPage /> },
     ],
   },
   {

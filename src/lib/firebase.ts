@@ -21,5 +21,13 @@ export const db = getFirestore(app)
 export const functions = getFunctions(app, 'southamerica-east1')
 export const googleProvider = new GoogleAuthProvider()
 
+/** Builds the direct Cloud Run URL for a deployed v2 callable function.
+ *  Pattern: https://{fnname-lowercase}-{VITE_CLOUD_RUN_BASE}
+ */
+export function cloudRunUrl(fnName: string): string {
+  const base = import.meta.env.VITE_CLOUD_RUN_BASE
+  return `https://${fnName.toLowerCase()}-${base}`
+}
+
 // Analytics só carrega em ambientes que suportam (não em SSR/Node)
 isSupported().then((yes) => yes && getAnalytics(app))

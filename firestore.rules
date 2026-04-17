@@ -2,8 +2,34 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // Nenhum acesso por padrão
     match /{document=**} {
       allow read, write: if false;
+    }
+
+    // Links — leitura apenas pelo dono, escrita só via Admin SDK (Cloud Functions)
+    match /links/{linkId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow write: if false;
+    }
+
+    // Slugs — leitura pública para verificar disponibilidade no cliente, escrita só via Admin SDK
+    match /slugs/{slug} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // Perfil de usuário — leitura apenas pelo próprio usuário, escrita só via Admin SDK
+    match /users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false;
+    }
+
+    // Cliques — leitura apenas pelo dono do link, escrita só via Admin SDK
+    match /clicks/{clickId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow write: if false;
     }
   }
 }

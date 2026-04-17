@@ -26,3 +26,6 @@ functions/lib
 *.njsproj
 *.sln
 *.sw?
+
+.firebase
+.env

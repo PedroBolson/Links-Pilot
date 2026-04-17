@@ -82,6 +82,24 @@ const es: Translation = {
     generic: 'Ocurrió un error. Por favor, inténtalo de nuevo.',
     linkNotFound: 'Enlace no encontrado.',
   },
+  home: {
+    badge: 'Acortador de enlaces con control de expiración',
+    headlinePart1: 'Enlaces cortos.',
+    headlinePart2: 'Expiración real.',
+    subtitle: 'Crea enlaces cortos que expiran automáticamente. Rastrea clics, genera códigos QR y mantén control total — todo desde un panel.',
+    ctaNote: 'Sin tarjeta de crédito · Plan gratuito incluye 10 enlaces',
+    feature1Title: 'Control de expiración',
+    feature1Desc: 'Configura enlaces para que expiren en minutos, días o meses. Dejan de funcionar automáticamente.',
+    feature2Title: 'Seguimiento de clics',
+    feature2Desc: 'Ve cuántas veces se accedió a cada enlace y cuándo fue el último acceso.',
+    feature3Title: 'Código QR incluido',
+    feature3Desc: 'Cada enlace corto incluye un código QR listo para descargar y compartir.',
+    themeLight: 'Claro',
+    themeDark: 'Oscuro',
+    themeSystem: 'Sistema',
+    loginRequired: 'Inicio de sesión requerido · plan gratuito incluye 10 enlaces',
+    footer: 'Construido con Firebase & React',
+  },
 }
 
 export default es

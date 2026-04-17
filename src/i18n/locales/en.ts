@@ -80,7 +80,29 @@ const en = {
     generic: 'An error occurred. Please try again.',
     linkNotFound: 'Link not found.',
   },
+  home: {
+    badge: 'Link shortener with expiration control',
+    headlinePart1: 'Short links.',
+    headlinePart2: 'Real expiration.',
+    subtitle: 'Create short links that expire automatically. Track clicks, generate QR codes, and keep full control — all from one dashboard.',
+    ctaNote: 'No credit card required · Free plan includes 10 links',
+    feature1Title: 'Expiration control',
+    feature1Desc: 'Set links to expire in minutes, days or months. They stop working automatically.',
+    feature2Title: 'Click tracking',
+    feature2Desc: 'See how many times each link was clicked and when it was last accessed.',
+    feature3Title: 'QR Code included',
+    feature3Desc: 'Every short link comes with a downloadable QR code, ready to share anywhere.',
+    themeLight: 'Light',
+    themeDark: 'Dark',
+    themeSystem: 'System',
+    loginRequired: 'Sign in required · free plan includes 10 links',
+    footer: 'Built with Firebase & React',
+  },
 } as const
 
-export type Translation = typeof en
+type DeepStringify<T> = {
+  [K in keyof T]: T[K] extends string ? string : DeepStringify<T[K]>
+}
+
+export type Translation = DeepStringify<typeof en>
 export default en

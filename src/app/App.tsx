@@ -1,4 +1,6 @@
 import { RouterProvider } from 'react-router-dom'
+import { TooltipProvider } from '@/components/ui/tooltip'
+import { Toaster } from '@/components/ui/sonner'
 import { QueryProvider } from './providers/QueryProvider'
 import { AuthProvider } from './providers/AuthProvider'
 import { ThemeProvider } from './providers/ThemeProvider'
@@ -9,7 +11,10 @@ export default function App() {
     <ThemeProvider>
       <QueryProvider>
         <AuthProvider>
-          <RouterProvider router={router} />
+          <TooltipProvider>
+            <RouterProvider router={router} />
+            <Toaster richColors closeButton />
+          </TooltipProvider>
         </AuthProvider>
       </QueryProvider>
     </ThemeProvider>
