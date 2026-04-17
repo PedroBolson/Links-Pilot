@@ -79,7 +79,7 @@ export const createLink = onCall(
     return {
       linkId: linkRef.id,
       slug,
-      shortUrl: `${process.env.HOSTING_URL ?? "https://linkspilot.web.app"}/r/${slug}`,
+      shortUrl: `${process.env.HOSTING_URL ?? "https://linkspilot.pedrobolson.com.br"}/r/${slug}`,
     };
   },
 );
