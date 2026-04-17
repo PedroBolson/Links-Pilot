@@ -2,6 +2,8 @@
 
 > **Smart URL shortener** — Create, manage and track short links with QR codes, expiration control and click analytics.
 
+> **⚠️ SECURITY ALERT**: Firebase credentials were accidentally exposed in the Git history (commit 6820d48d). While Firebase API keys are designed to be public, **immediate action is required** to restrict the API key. See [`SECURITY_INCIDENT.md`](./SECURITY_INCIDENT.md) for detailed remediation steps.
+
 [![Live](https://img.shields.io/badge/live-linkspilot.web.app-7c3aed?style=flat-square)](https://linkspilot.web.app)
 [![Firebase](https://img.shields.io/badge/Firebase-FFCA28?style=flat-square&logo=firebase&logoColor=black)](https://firebase.google.com)
 [![React](https://img.shields.io/badge/React_19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
@@ -392,6 +394,12 @@ VITE_SHORT_BASE_URL=https://your-project.web.app
 # Find it after first deploy: Firebase Console → Functions → any function URL
 VITE_CLOUD_RUN_BASE=xxxxxxxxxx-xx.a.run.app
 ```
+
+> **⚠️ SECURITY WARNING**
+> **NEVER commit your `.env` file to Git!** The `.env` file is already listed in `.gitignore` to prevent accidental commits. If you accidentally commit credentials:
+> 1. **Immediately restrict your Firebase API key** in [Google Cloud Console](https://console.cloud.google.com/apis/credentials) by adding HTTP referrer restrictions
+> 2. See `SECURITY_INCIDENT.md` for detailed remediation steps
+> 3. Consider rotating credentials if you detect suspicious activity
 
 > **Why `VITE_CLOUD_RUN_BASE`?**
 > Firebase Functions v2 are deployed on Cloud Run. The legacy `cloudfunctions.net` routing is not always provisioned for new projects. Using `httpsCallableFromURL` with the direct Cloud Run URL (`https://{function-name}-{hash}.a.run.app`) is the reliable alternative. The hash is project-specific and never changes after initial deployment.
