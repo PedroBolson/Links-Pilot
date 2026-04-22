@@ -1,5 +1,7 @@
 import {onCall, HttpsError} from "firebase-functions/v2/https";
-import {getFirestore, FieldValue} from "firebase-admin/firestore";
+import {FieldValue} from "firebase-admin/firestore";
+import {db} from "../lib/firestore.js";
+import {auditLog} from "../lib/audit.js";
 
 export const ensureProfile = onCall(
   {region: "southamerica-east1", cors: true},
@@ -10,7 +12,6 @@ export const ensureProfile = onCall(
 
     const uid = request.auth.uid;
     const email = request.auth.token.email ?? "";
-    const db = getFirestore();
     const ref = db.collection("users").doc(uid);
     const snap = await ref.get();
 
@@ -21,9 +22,12 @@ export const ensureProfile = onCall(
         linkCount: 0,
         createdAt: FieldValue.serverTimestamp(),
       });
+
+      auditLog({action: "ensureProfile", uid, result: "success", metadata: {created: true}});
       return {created: true};
     }
 
+    auditLog({action: "ensureProfile", uid, result: "success", metadata: {created: false}});
     return {created: false};
-  },
+  }
 );

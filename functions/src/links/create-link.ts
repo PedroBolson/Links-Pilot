@@ -4,10 +4,16 @@ import {db} from "../lib/firestore.js";
 import {createLinkSchema} from "../lib/validators.js";
 import {generateSlug} from "../lib/slug.js";
 import {PLAN_LIMITS} from "../types/link.types.js";
+import {enforceRateLimit} from "../lib/rate-limiter.js";
+import {safeBrowsingApiKey, checkUrlSafety} from "../lib/safe-browsing.js";
+import {auditLog} from "../lib/audit.js";
 import type {UserProfile} from "../types/link.types.js";
 
+const RATE_LIMIT_FREE = 20;
+const RATE_LIMIT_PRO = 200;
+
 export const createLink = onCall(
-  {region: "southamerica-east1", cors: true},
+  {region: "southamerica-east1", cors: true, secrets: [safeBrowsingApiKey]},
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentication required.");
@@ -36,10 +42,35 @@ export const createLink = onCall(
     }
 
     const userProfile = userSnap.data() as UserProfile;
-    const limit = PLAN_LIMITS[userProfile.plan];
 
+    // 1. Rate limiting — impede criação em massa mesmo dentro do limite do plano
+    const rateMax = userProfile.plan === "pro" ? RATE_LIMIT_PRO : RATE_LIMIT_FREE;
+    try {
+      await enforceRateLimit(uid, "createLink", rateMax);
+    } catch (err) {
+      auditLog({action: "createLink", uid, result: "rate_limited"});
+      throw err;
+    }
+
+    const limit = PLAN_LIMITS[userProfile.plan];
     if (userProfile.linkCount >= limit) {
       throw new HttpsError("resource-exhausted", "Link limit reached for your plan.");
+    }
+
+    // 2. Verificação de URL maliciosa via Google Safe Browsing
+    const apiKey = safeBrowsingApiKey.value();
+    const {safe, threats} = await checkUrlSafety(originalUrl, apiKey);
+    if (!safe) {
+      auditLog({
+        action: "createLink",
+        uid,
+        result: "url_blocked",
+        metadata: {url: originalUrl, threats},
+      });
+      throw new HttpsError(
+        "invalid-argument",
+        `URL blocked: flagged as ${threats.join(", ")}.`
+      );
     }
 
     const slug = requestedSlug?.trim() || generateSlug();
@@ -76,10 +107,15 @@ export const createLink = onCall(
       tx.update(userRef, {linkCount: FieldValue.increment(1)});
     });
 
-    return {
-      linkId: linkRef.id,
-      slug,
-      shortUrl: `${process.env.HOSTING_URL ?? "https://linkspilot.pedrobolson.com.br"}/r/${slug}`,
-    };
-  },
+    const shortUrl = `${process.env.HOSTING_URL ?? "https://linkspilot.pedrobolson.com.br"}/r/${slug}`;
+
+    auditLog({
+      action: "createLink",
+      uid,
+      result: "success",
+      metadata: {linkId: linkRef.id, slug},
+    });
+
+    return {linkId: linkRef.id, slug, shortUrl};
+  }
 );

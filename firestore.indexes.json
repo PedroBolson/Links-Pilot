@@ -81,6 +81,18 @@
       "fieldPath": "ttl",
       "ttl": true,
       "indexes": []
+    },
+    {
+      "collectionGroup": "rate_limits",
+      "fieldPath": "ttl",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "click_dedup",
+      "fieldPath": "ttl",
+      "ttl": true,
+      "indexes": []
     }
   ]
 }

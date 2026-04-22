@@ -324,7 +324,10 @@ linkspilot/
 │       ├── lib/
 │       │   ├── firestore.ts         # Admin SDK db singleton
 │       │   ├── slug.ts              # generateSlug() with nanoid
-│       │   └── validators.ts        # Zod schemas (backend)
+│       │   ├── validators.ts        # Zod schemas (backend)
+│       │   ├── audit.ts             # Structured audit log emitter (Cloud Logging)
+│       │   ├── rate-limiter.ts      # Firestore-based sliding window rate limiter
+│       │   └── safe-browsing.ts     # Google Safe Browsing API v4 client
 │       └── types/
 │           └── link.types.ts        # Types + PLAN_LIMITS + RESERVED_SLUGS
 │
@@ -497,6 +500,27 @@ interface ClickEvent {
 }
 ```
 
+#### `rate_limits` — Per-user rate limit windows
+
+```typescript
+// Document ID = "{action}_{uid}" (e.g., "createLink_abc123")
+interface RateLimitWindow {
+  count: number        // Requests within the current window
+  windowStart: Timestamp
+  ttl: Timestamp       // Auto-deleted by Firestore TTL after 2h
+}
+```
+
+#### `click_dedup` — Click deduplication records
+
+```typescript
+// Document ID = "{linkId}_{ipHash}_{hourWindow}"
+// Prevents the same IP from inflating click counts within a 1-hour window
+interface ClickDedup {
+  ttl: Timestamp       // Auto-deleted by Firestore TTL after 2h
+}
+```
+
 ### Security Rules
 
 All write operations go through Cloud Functions using the **Admin SDK**, which bypasses Firestore security rules. This eliminates entire categories of client-side exploits (plan bypass, unauthorized deletes, data poisoning).
@@ -534,11 +558,7 @@ Defined in `firestore.indexes.json` and deployed via `firebase deploy --only fir
 | `clicks` | `linkId ASC` + `timestamp DESC` | Per-link analytics |
 | `clicks` | `userId ASC` + `timestamp DESC` | User-level analytics |
 
-**TTL Policy** — The `ttl` field on `links` documents is configured for Firestore's native TTL auto-delete. Enable it in the console:
-
-```
-Firestore → Data → links collection → ttl field → Enable TTL policy
-```
+**TTL Policy** — The `ttl` field is configured for Firestore's native TTL auto-delete on three collections: `links`, `rate_limits`, and `click_dedup`. Deployed automatically via `firebase deploy --only firestore:indexes`.
 
 ---
 
@@ -569,18 +589,21 @@ Input:    { originalUrl, slug?, title?, expiresAt }
 
 Error codes:
   unauthenticated    → not signed in
-  invalid-argument   → Zod validation failed (see field message for details)
+  invalid-argument   → Zod validation failed / URL flagged as unsafe by Safe Browsing
   not-found          → user profile document missing
-  resource-exhausted → plan link limit reached (free: 10)
+  resource-exhausted → plan link limit or hourly rate limit reached
   already-exists     → custom slug is already taken
 
 Output: { linkId, slug, shortUrl }
 
-Atomic transaction:
-  1. Check /slugs/{slug} doesn't exist
-  2. Create /links/{linkId}
-  3. Create /slugs/{slug}
-  4. Increment /users/{uid}.linkCount
+Security layers (in order):
+  1. Auth check          — unauthenticated request rejected immediately
+  2. Zod validation      — schema enforced server-side (url, slug, title, expiresAt)
+  3. Rate limiting       — Firestore sliding window (free: 20/h, pro: 200/h)
+  4. Plan limit check    — linkCount vs PLAN_LIMITS (free: 10, pro: unlimited)
+  5. Safe Browsing check — Google Safe Browsing API v4 (MALWARE, SOCIAL_ENGINEERING,
+                           UNWANTED_SOFTWARE, POTENTIALLY_HARMFUL_APPLICATION)
+  6. Atomic transaction  — slug uniqueness + link write + linkCount increment
 ```
 
 ### `deleteLink` — HTTPS Callable
@@ -615,14 +638,24 @@ Trigger:  onRequest (HTTP GET)
 Auth:     None (public)
 Route:    /r/:slug  (via Firebase Hosting rewrite rule)
 
+Security layers:
+  1. IP rate limiting    — in-memory per Cloud Run instance (60 req/min per IP)
+  2. Expiration check    — expired links redirect to /expired
+  3. Click deduplication — SHA-256(ip + date) key prevents the same IP from
+                           inflating clickCount more than once per hour
+
 Flow:
+  - Rate limit check (in-memory, per IP, 60/min)
   - Read /slugs/{slug}      (document ID lookup — O(1))
   - Read /links/{linkId}
   - Not found → 302 /expired
   - Expired   → 302 /expired
-  - Active    → create /clicks/{id}
-                increment links/{linkId}.clickCount
-                return 302 → originalUrl
+  - Duplicate click → 302 originalUrl (no Firestore write)
+  - Unique click  → atomic transaction:
+                      create /clicks/{id}
+                      create /click_dedup/{key} (TTL 2h)
+                      increment links/{linkId}.clickCount
+                    return 302 → originalUrl
 ```
 
 ### `cleanupExpiredLinks` — Scheduled
@@ -733,9 +766,53 @@ resources: {
 | User bypasses plan limits | `linkCount` maintained server-side with atomic `FieldValue.increment`; checked in `createLink` |
 | Slug squatting on reserved paths | `RESERVED_SLUGS` set checked before any slug is written |
 | Open redirect to non-HTTP URLs | `originalUrl` validated: `z.string().url()` + must start with `http://` or `https://` |
+| Link pointing to malware or phishing site | Google Safe Browsing API v4 checks every URL at creation time (MALWARE, SOCIAL_ENGINEERING, UNWANTED_SOFTWARE, POTENTIALLY_HARMFUL_APPLICATION) |
 | Unauthenticated function calls | `if (!request.auth)` guard at the top of every callable function |
 | CORS bypass on Cloud Run | `cors: true` on all callable functions; Firebase handles OPTIONS preflight |
 | XSS via link titles | Titles are rendered as text content, never as HTML |
+| Brute-force / mass link creation | Firestore-based rate limiter: free plan capped at 20 creates/hour, pro at 200/hour |
+| Redirect endpoint flood (DDoS) | In-memory IP rate limiter: 60 requests/minute per IP per Cloud Run instance |
+| Artificial click inflation (analytics fraud) | Click deduplication: SHA-256(ip + daily-salt) prevents counting the same IP more than once per hour per link |
+
+### Audit Logging
+
+All Cloud Functions emit structured JSON logs to **Cloud Logging** on every operation:
+
+```json
+{
+  "audit": true,
+  "action": "createLink",
+  "uid": "abc123",
+  "result": "url_blocked",
+  "metadata": { "url": "https://...", "threats": ["MALWARE"] },
+  "timestamp": "2025-04-22T14:30:00.000Z"
+}
+```
+
+Filter in Firebase Console → Functions → Logs:
+```
+jsonPayload.audit=true
+jsonPayload.action="createLink"
+jsonPayload.result="url_blocked"
+```
+
+### Safe Browsing API Key Setup
+
+The Google Safe Browsing API key is stored in **Firebase Secret Manager** (never in `.env` or source code):
+
+```bash
+# 1. Enable the Safe Browsing API in your Google Cloud project
+#    Cloud Console → APIs & Services → Library → Safe Browsing API → Enable
+
+# 2. Create an API key (restrict it to Safe Browsing API only)
+#    Cloud Console → APIs & Services → Credentials → Create credentials → API key
+
+# 3. Store it in Secret Manager
+firebase functions:secrets:set SAFE_BROWSING_API_KEY
+
+# 4. Verify
+firebase functions:secrets:access SAFE_BROWSING_API_KEY
+```
 
 ### Dual-Layer Validation
 
