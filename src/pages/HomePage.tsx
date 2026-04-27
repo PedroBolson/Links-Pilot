@@ -66,6 +66,7 @@ const navBtnCn = cn(
 type DemoPhase = 'input' | 'processing' | 'result'
 
 function DemoWidget() {
+  const { t } = useTranslation()
   const [idx, setIdx] = useState(0)
   const [phase, setPhase] = useState<DemoPhase>('input')
 
@@ -97,7 +98,7 @@ function DemoWidget() {
           <span className="truncate font-mono">linkspilot.pedrobolson.com.br</span>
         </div>
         <span className="shrink-0 rounded border border-hero-border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-hero-fg-whisper">
-          demo
+          {t('home.demoBadge')}
         </span>
       </div>
 
@@ -110,7 +111,7 @@ function DemoWidget() {
             <span className="flex h-4 w-4 items-center justify-center rounded-full border border-hero-border text-[8px] font-bold">
               1
             </span>
-            Original URL
+            {t('links.originalUrl')}
           </p>
           <div
             className={cn(
@@ -131,17 +132,17 @@ function DemoWidget() {
             {isProcessing ? (
               <>
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-brand-400" />
-                <span className="font-medium text-brand-400">Shortening…</span>
+                <span className="font-medium text-brand-400">{t('home.demoShortening')}</span>
               </>
             ) : hasResult ? (
               <>
                 <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-                <span className="font-medium text-green-500">Done!</span>
+                <span className="font-medium text-green-500">{t('home.demoDone')}</span>
               </>
             ) : (
               <>
                 <ArrowDown className="h-3.5 w-3.5 text-hero-fg-dim" />
-                <span className="text-hero-fg-dim">Generating short link</span>
+                <span className="text-hero-fg-dim">{t('home.demoGenerating')}</span>
               </>
             )}
           </div>
@@ -154,7 +155,7 @@ function DemoWidget() {
             <span className="flex h-4 w-4 items-center justify-center rounded-full border border-hero-border text-[8px] font-bold">
               2
             </span>
-            Short Link
+            {t('home.demoShortLink')}
           </p>
           <div
             className={cn(
@@ -173,10 +174,16 @@ function DemoWidget() {
               </span>
             </div>
             <div className="flex shrink-0 items-center gap-0.5">
-              <button className="rounded-lg p-1.5 text-hero-fg-dim transition-colors hover:bg-brand-500/20 hover:text-brand-300">
+              <button
+                className="rounded-lg p-1.5 text-hero-fg-dim transition-colors hover:bg-brand-500/20 hover:text-brand-300"
+                aria-label={t('links.copyLink')}
+              >
                 <Copy className="h-3 w-3" />
               </button>
-              <button className="rounded-lg p-1.5 text-hero-fg-dim transition-colors hover:bg-brand-500/20 hover:text-brand-300">
+              <button
+                className="rounded-lg p-1.5 text-hero-fg-dim transition-colors hover:bg-brand-500/20 hover:text-brand-300"
+                aria-label={t('links.viewQr')}
+              >
                 <QrCode className="h-3 w-3" />
               </button>
             </div>
@@ -207,7 +214,7 @@ export default function HomePage() {
   const navigate = useNavigate()
   const { mutate: signIn, isPending } = useSignInWithGoogle()
 
-  useEffect(() => { document.title = 'LinksPilot – Smart URL Shortener' }, [])
+  useEffect(() => { document.title = t('home.pageTitle') }, [t])
 
   const ThemeIcon = THEME_ICONS[theme]
 
@@ -261,7 +268,7 @@ export default function HomePage() {
         <div className="flex items-center gap-1">
           {/* Language switcher */}
           <DropdownMenu>
-            <DropdownMenuTrigger className={navBtnCn} aria-label={t('nav.home')}>
+            <DropdownMenuTrigger className={navBtnCn} aria-label={t('common.changeLanguage')}>
               <Globe className="h-4 w-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -279,7 +286,7 @@ export default function HomePage() {
 
           {/* Theme switcher */}
           <DropdownMenu>
-            <DropdownMenuTrigger className={navBtnCn} aria-label="Theme">
+            <DropdownMenuTrigger className={navBtnCn} aria-label={t('common.toggleTheme')}>
               <ThemeIcon className="h-4 w-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">

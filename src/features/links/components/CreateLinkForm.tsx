@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { addDays, format } from 'date-fns'
+import { addDays } from 'date-fns'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { CalendarClock } from 'lucide-react'
@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { createLinkSchema, type CreateLinkFormValues } from '../schemas/link.schema'
 import { useCreateLink } from '../hooks/useCreateLink'
-import { cn } from '@/lib/utils'
+import { cn, formatDate, timeFromNow } from '@/lib/utils'
 
 const EXPIRY_PRESETS = [
   { label: '1d',  days: 1 },
@@ -25,7 +25,7 @@ interface CreateLinkFormProps {
 }
 
 export function CreateLinkForm({ onSuccess }: CreateLinkFormProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { mutate: createLink, isPending } = useCreateLink()
   const [selectedPreset, setSelectedPreset] = useState<number>(7)
 
@@ -64,7 +64,7 @@ export function CreateLinkForm({ onSuccess }: CreateLinkFormProps) {
         onSuccess: (data) => {
           reset()
           setSelectedPreset(7)
-          toast.success('Link created!')
+          toast.success(t('links.createdSuccess'))
           onSuccess?.(data.shortUrl)
         },
         onError: (err) => {
@@ -74,7 +74,7 @@ export function CreateLinkForm({ onSuccess }: CreateLinkFormProps) {
           } else if (e.code === 'functions/resource-exhausted') {
             toast.error(t('errors.limitReached'))
           } else if (e.code === 'functions/not-found') {
-            toast.error('User profile not found. Please sign out and sign in again.')
+            toast.error(t('errors.userProfileNotFound'))
           } else {
             toast.error(e.message ?? t('errors.generic'))
           }
@@ -122,10 +122,10 @@ export function CreateLinkForm({ onSuccess }: CreateLinkFormProps) {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="title">Title (optional)</Label>
+            <Label htmlFor="title">{t('links.titleLabel')}</Label>
             <Input
               id="title"
-              placeholder="My link title"
+              placeholder={t('links.titlePlaceholder')}
               {...register('title')}
             />
           </div>
@@ -159,15 +159,11 @@ export function CreateLinkForm({ onSuccess }: CreateLinkFormProps) {
                 <p className="text-xs font-medium text-foreground">
                   {t('links.expiresIn')}{' '}
                   <span className="text-primary">
-                    {selectedPreset === 1
-                      ? '1 day'
-                      : selectedPreset < 60
-                        ? `${selectedPreset} days`
-                        : null}
+                    {expiresAt ? timeFromNow(expiresAt, i18n.language) : null}
                   </span>
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {expiresAt ? format(expiresAt, 'PPP p') : '—'}
+                  {expiresAt ? formatDate(expiresAt, i18n.language) : '—'}
                 </p>
               </div>
             </div>

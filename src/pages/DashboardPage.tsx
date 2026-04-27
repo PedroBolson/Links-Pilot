@@ -16,7 +16,7 @@ export default function DashboardPage() {
   const { t } = useTranslation()
   const { data: links, isLoading, isError } = useLinks()
 
-  useEffect(() => { document.title = 'Dashboard – LinksPilot' }, [])
+  useEffect(() => { document.title = t('dashboard.pageTitle') }, [t])
 
   const stats = useMemo(() => {
     if (!links) return { total: 0, active: 0, totalClicks: 0 }
@@ -32,7 +32,7 @@ export default function DashboardPage() {
       <div className="space-y-8">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">{t('dashboard.title')}</h1>
-          <p className="text-sm text-muted-foreground">Manage and track your short links.</p>
+          <p className="text-sm text-muted-foreground">{t('dashboard.subtitle')}</p>
         </div>
 
         {/* Stats */}

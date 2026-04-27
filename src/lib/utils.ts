@@ -14,20 +14,24 @@ const DATE_LOCALES: Record<string, Locale> = {
   es,
 }
 
+function resolveLanguage(lang: string): string {
+  return lang.split('-')[0]
+}
+
 export function formatDate(
   date: Date | Timestamp,
   lang = 'en',
-  pattern = 'PPP',
+  pattern = 'Pp',
 ): string {
   const d = 'toDate' in date ? date.toDate() : date
-  return format(d, pattern, { locale: DATE_LOCALES[lang] ?? enUS })
+  return format(d, pattern, { locale: DATE_LOCALES[resolveLanguage(lang)] ?? enUS })
 }
 
 export function timeFromNow(date: Date | Timestamp, lang = 'en'): string {
   const d = 'toDate' in date ? date.toDate() : date
   return formatDistanceToNow(d, {
     addSuffix: true,
-    locale: DATE_LOCALES[lang] ?? enUS,
+    locale: DATE_LOCALES[resolveLanguage(lang)] ?? enUS,
   })
 }
 

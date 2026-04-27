@@ -53,7 +53,7 @@ export function LinkCard({ link, shortBaseUrl }: LinkCardProps) {
     deleteLink(link.id, {
       onSuccess: () => {
         setConfirmOpen(false)
-        toast.success('Link deleted.')
+        toast.success(t('links.deletedSuccess'))
       },
       onError: () => toast.error(t('errors.generic')),
     })
@@ -129,8 +129,9 @@ export function LinkCard({ link, shortBaseUrl }: LinkCardProps) {
                 {link.clickCount}
               </span>
               <span>
-                {expired ? 'Expired ' : 'Expires '}
-                {timeFromNow(link.expiresAt, i18n.language)}
+                {expired
+                  ? t('links.expiredRelative', { time: timeFromNow(link.expiresAt, i18n.language) })
+                  : t('links.expiresRelative', { time: timeFromNow(link.expiresAt, i18n.language) })}
               </span>
             </div>
 
@@ -198,7 +199,7 @@ export function LinkCard({ link, shortBaseUrl }: LinkCardProps) {
       <Dialog open={qrOpen} onOpenChange={setQrOpen}>
         <DialogContent className="flex flex-col items-center gap-4">
           <DialogHeader>
-            <DialogTitle>QR Code</DialogTitle>
+            <DialogTitle>{t('links.qrCode')}</DialogTitle>
             <DialogDescription className="text-center">{shortUrl}</DialogDescription>
           </DialogHeader>
           <div ref={qrWrapperRef} className="rounded-xl border border-border bg-white p-4">
@@ -207,11 +208,11 @@ export function LinkCard({ link, shortBaseUrl }: LinkCardProps) {
           <DialogFooter className="w-full flex-row justify-center gap-2 sm:justify-center">
             <Button variant="outline" onClick={handleDownloadQr}>
               <Download className="mr-2 h-4 w-4" />
-              Download PNG
+              {t('links.downloadPng')}
             </Button>
             <Button onClick={handleShareQr}>
               <Share2 className="mr-2 h-4 w-4" />
-              Share
+              {t('links.share')}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -59,12 +59,12 @@ export function Header() {
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground text-xs font-bold">
             L
           </span>
-          LinksPilot
+          <span>LinksPilot</span>
         </Link>
 
         <div className="flex items-center gap-1">
           <DropdownMenu>
-            <DropdownMenuTrigger className={triggerCn} aria-label="Change language">
+            <DropdownMenuTrigger className={triggerCn} aria-label={t('common.changeLanguage')}>
               <Globe className="h-4 w-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -81,18 +81,18 @@ export function Header() {
           </DropdownMenu>
 
           <DropdownMenu>
-            <DropdownMenuTrigger className={triggerCn} aria-label="Toggle theme">
+            <DropdownMenuTrigger className={triggerCn} aria-label={t('common.toggleTheme')}>
               <ThemeIcon className="h-4 w-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => setTheme('light')}>
-                <Sun className="mr-2 h-4 w-4" /> Light
+                <Sun className="mr-2 h-4 w-4" /> {t('home.themeLight')}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setTheme('dark')}>
-                <Moon className="mr-2 h-4 w-4" /> Dark
+                <Moon className="mr-2 h-4 w-4" /> {t('home.themeDark')}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setTheme('system')}>
-                <Monitor className="mr-2 h-4 w-4" /> System
+                <Monitor className="mr-2 h-4 w-4" /> {t('home.themeSystem')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -107,7 +107,7 @@ export function Header() {
                   {user.photoURL ? (
                     <img
                       src={user.photoURL}
-                      alt={user.displayName ?? 'User'}
+                      alt={user.displayName ?? t('nav.user')}
                       className="h-7 w-7 rounded-full object-cover"
                       referrerPolicy="no-referrer"
                     />
