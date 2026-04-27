@@ -44,7 +44,7 @@ The application enforces a **server-side security model**: all writes to Firesto
 
 Key design goals:
 - **Zero trust on the client** — Firestore rules deny all client writes; every mutation runs server-side
-- **Scalable by default** — Cloud Run auto-scales, Firestore TTL auto-expires old data
+- **Scalable by default** — Cloud Run auto-scales, scheduled cleanup keeps link data consistent, and Firestore TTL auto-expires retention-only records
 - **i18n from day one** — EN / PT / ES with browser auto-detection
 - **Type safety end-to-end** — Zod schemas at both frontend and backend validate all data at both layers
 
@@ -125,7 +125,7 @@ Enforced server-side in the `createLink` Cloud Function — the client cannot by
 | i18n | i18next + react-i18next | 26 / 17 |
 | Date Utilities | date-fns | 4.1 |
 | ID Generation | nanoid | 5.1 |
-| Theme | next-themes | 0.4 |
+| Theme | Custom React context | — |
 | Font | Geist Variable | — |
 
 ### Backend (Cloud Functions)
@@ -236,7 +236,7 @@ linkspilot/
 │   │   └── providers/
 │   │       ├── AuthProvider.tsx     # Firebase Auth state context
 │   │       ├── QueryProvider.tsx    # TanStack Query client provider
-│   │       └── ThemeProvider.tsx    # next-themes wrapper
+│   │       └── ThemeProvider.tsx    # Light / dark / system theme context
 │   │
 │   ├── components/
 │   │   ├── ui/                      # shadcn/ui primitive components
@@ -295,7 +295,7 @@ linkspilot/
 │   ├── lib/
 │   │   ├── firebase.ts              # SDK init + cloudRunUrl() helper
 │   │   ├── query-client.ts          # QueryClient singleton
-│   │   └── utils.ts                 # cn(), timeFromNow(), isExpired()
+│   │   └── utils.ts                 # cn(), formatDate(), timeFromNow(), isExpired()
 │   │
 │   ├── hooks/
 │   │   ├── useAuth.ts               # Auth state consumer hook
@@ -320,7 +320,7 @@ linkspilot/
 │       │   ├── create-link.ts       # onCall: validate + create short link
 │       │   ├── delete-link.ts       # onCall: verify ownership + delete
 │       │   ├── redirect-link.ts     # onRequest: slug lookup + 302 redirect
-│       │   └── cleanup-expired.ts   # onSchedule: mark expired links
+│       │   └── cleanup-expired.ts   # onSchedule: expire links + clean stale dependencies
 │       ├── lib/
 │       │   ├── firestore.ts         # Admin SDK db singleton
 │       │   ├── slug.ts              # generateSlug() with nanoid
@@ -339,7 +339,7 @@ linkspilot/
 ├── firestore.rules                  # Security rules (deny all client writes)
 ├── firestore.indexes.json           # Composite indexes + TTL field config
 ├── .firebaserc                      # Active Firebase project binding
-├── vite.config.ts                   # Vite + Tailwind v4 plugin config
+├── vite.config.ts                   # Vite + Tailwind v4 + manual chunk config
 ├── tsconfig.json                    # Root TypeScript config
 ├── tsconfig.app.json                # App-specific TypeScript config
 └── components.json                  # shadcn/ui CLI configuration
@@ -398,6 +398,26 @@ VITE_CLOUD_RUN_BASE=xxxxxxxxxx-xx.a.run.app
 
 > **Why `VITE_CLOUD_RUN_BASE`?**
 > Firebase Functions v2 are deployed on Cloud Run. The legacy `cloudfunctions.net` routing is not always provisioned for new projects. Using `httpsCallableFromURL` with the direct Cloud Run URL (`https://{function-name}-{hash}.a.run.app`) is the reliable alternative. The hash is project-specific and never changes after initial deployment.
+
+For GitHub Actions Hosting deploys, the same `VITE_*` values must also exist as GitHub repository variables:
+
+```
+Settings → Secrets and variables → Actions → Variables
+```
+
+Required variables:
+
+```text
+VITE_FIREBASE_API_KEY
+VITE_FIREBASE_AUTH_DOMAIN
+VITE_FIREBASE_PROJECT_ID
+VITE_FIREBASE_STORAGE_BUCKET
+VITE_FIREBASE_MESSAGING_SENDER_ID
+VITE_FIREBASE_APP_ID
+VITE_FIREBASE_MEASUREMENT_ID
+VITE_SHORT_BASE_URL
+VITE_CLOUD_RUN_BASE
+```
 
 ---
 
@@ -608,7 +628,7 @@ Security layers (in order):
 
 ### `deleteLink` — HTTPS Callable
 
-Verifies ownership before deletion. Cleans up both the link document and its slug index atomically.
+Verifies ownership before deletion. Removes click events in bounded batches, deletes the slug only if it still points to the same `linkId`, then deletes the link and decrements the user's link count in a transaction.
 
 ```
 Trigger:  onCall (HTTPS Callable)
@@ -623,10 +643,11 @@ Error codes:
 
 Output: { success: true }
 
-Atomic transaction:
-  1. Delete /links/{linkId}
-  2. Delete /slugs/{slug}
-  3. Decrement /users/{uid}.linkCount
+Cleanup flow:
+  1. Delete /clicks where linkId == input.linkId in batches of 400
+  2. Read /slugs/{slug} and only delete it if slug.linkId == input.linkId
+  3. Transactionally delete /links/{linkId}
+  4. Transactionally decrement /users/{uid}.linkCount
 ```
 
 ### `redirect` — HTTP Request
@@ -660,14 +681,19 @@ Flow:
 
 ### `cleanupExpiredLinks` — Scheduled
 
-Runs every 60 minutes to mark expired links as `status: 'expired'`. Firestore TTL handles actual document deletion; this function keeps the UI state consistent.
+Runs every 60 minutes. It keeps the existing expiration model intact: links are marked as `status: 'expired'`, and Firestore TTL still handles the eventual deletion of `/links/{linkId}`. Before marking active links as expired, the function also cleans related `slugs` and `clicks` so TTL does not leave orphaned data behind.
 
 ```
-Trigger:      onSchedule (every 60 minutes)
-Auth:         Service account (automatic)
-Query:        links where status='active' AND expiresAt <= now()
-Batch size:   Up to 400 documents per run
-Side effects: Sets links.status = 'expired'
+Trigger:       onSchedule (every 60 minutes)
+Auth:          Service account (automatic)
+Primary query: links where status='active' AND expiresAt <= now()
+Limits:        Up to 100 active expired links per run
+Click batches: 400 deletes per batch
+Side effects:
+  1. Delete matching /slugs/{slug} only when slug.linkId matches the link
+  2. Delete /clicks by linkId in bounded batches
+  3. Set links.status = 'expired'
+  4. Run bounded retroactive cleanup for stale expired slugs and orphaned clicks
 ```
 
 ---
@@ -707,6 +733,33 @@ firebase deploy --only functions:createLink
 firebase deploy --only firestore:rules
 
 # Firestore indexes only
+firebase deploy --only firestore:indexes
+```
+
+### GitHub Actions Hosting Deploy
+
+The Firebase CLI generated GitHub Actions workflows for Hosting only:
+
+```text
+.github/workflows/firebase-hosting-merge.yml
+.github/workflows/firebase-hosting-pull-request.yml
+```
+
+Current automation:
+- Pull requests create Firebase Hosting preview channels.
+- Pushes to `main` deploy the built `dist/` directory to the live Hosting channel.
+- The workflow reads all `VITE_*` build-time values from GitHub repository variables.
+
+Backend and Firestore infrastructure are intentionally deployed manually from a trusted local environment:
+
+```bash
+# Functions
+firebase deploy --only functions
+
+# Firestore rules
+firebase deploy --only firestore:rules
+
+# Firestore indexes and TTL config
 firebase deploy --only firestore:indexes
 ```
 
@@ -842,7 +895,7 @@ Server (Cloud Function + Zod):
 - [ ] Pro plan billing integration (Stripe)
 - [ ] REST API access with API key management
 - [ ] Link preview cards (og:image generation via Puppeteer)
-- [ ] GitHub Actions CI/CD pipeline
+- [x] GitHub Actions Hosting CI/CD pipeline
 - [ ] Firebase Emulator seed data for local development
 
 ---

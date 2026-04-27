@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dialog'
 import { cn, timeFromNow, isExpired } from '@/lib/utils'
 import { useDeleteLink } from '@/features/links/hooks/useDeleteLink'
+import { AnimatedNumber } from '@/components/shared/AnimatedNumber'
 import type { Link } from '@/types/link.types'
 
 const QRCodeCanvas = lazy(() =>
@@ -129,7 +130,7 @@ export function LinkCard({ link, shortBaseUrl }: LinkCardProps) {
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
                 <MousePointerClick className="h-3.5 w-3.5" />
-                {link.clickCount}
+                <AnimatedNumber value={link.clickCount} durationMs={950} />
               </span>
               <span>
                 {expired

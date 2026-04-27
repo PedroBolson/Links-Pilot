@@ -1,5 +1,6 @@
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { AnimatedNumber } from '@/components/shared/AnimatedNumber'
 import type { LucideIcon } from 'lucide-react'
 
 interface StatsCardProps {
@@ -20,8 +21,12 @@ export function StatsCard({ label, value, icon: Icon, loading }: StatsCardProps)
           <p className="text-sm text-muted-foreground">{label}</p>
           {loading ? (
             <Skeleton className="mt-1 h-6 w-16" />
+          ) : typeof value === 'number' ? (
+            <p className="text-2xl font-semibold">
+              <AnimatedNumber value={value} durationMs={1000} />
+            </p>
           ) : (
-            <p className="text-2xl font-semibold tabular-nums">{value}</p>
+            <p className="text-2xl font-semibold">{value}</p>
           )}
         </div>
       </CardContent>

@@ -19,6 +19,7 @@ function toLink(id: string, data: Record<string, unknown>): Link {
 export function subscribeToUserLinks(
   userId: string,
   callback: (links: Link[]) => void,
+  onError?: (error: Error) => void,
 ): Unsubscribe {
   const q = query(
     collection(db, 'links'),
@@ -26,10 +27,14 @@ export function subscribeToUserLinks(
     orderBy('createdAt', 'desc'),
   )
 
-  return onSnapshot(q, (snap) => {
-    const links = snap.docs.map((d) => toLink(d.id, d.data()))
-    callback(links)
-  })
+  return onSnapshot(
+    q,
+    (snap) => {
+      const links = snap.docs.map((d) => toLink(d.id, d.data()))
+      callback(links)
+    },
+    onError,
+  )
 }
 
 export async function getUserLinks(userId: string): Promise<Link[]> {
