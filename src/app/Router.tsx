@@ -1,10 +1,17 @@
+/* eslint-disable react-refresh/only-export-components */
+import { lazy, Suspense, type ReactNode } from 'react'
 import { createBrowserRouter, Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
-import HomePage from '@/pages/HomePage'
-import AuthPage from '@/pages/AuthPage'
-import DashboardPage from '@/pages/DashboardPage'
-import RedirectPage from '@/pages/RedirectPage'
-import ExpiredLinkPage from '@/pages/ExpiredLinkPage'
+
+const HomePage = lazy(() => import('@/pages/HomePage'))
+const AuthPage = lazy(() => import('@/pages/AuthPage'))
+const DashboardPage = lazy(() => import('@/pages/DashboardPage'))
+const RedirectPage = lazy(() => import('@/pages/RedirectPage'))
+const ExpiredLinkPage = lazy(() => import('@/pages/ExpiredLinkPage'))
+
+function LazyPage({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<FullPageSpinner />}>{children}</Suspense>
+}
 
 function ProtectedRoute() {
   const { user, loading } = useAuth()
@@ -32,22 +39,22 @@ export const router = createBrowserRouter([
   {
     element: <HomeRoute />,
     children: [
-      { path: '/', element: <HomePage /> },
-      { path: '/auth', element: <AuthPage /> },
+      { path: '/', element: <LazyPage><HomePage /></LazyPage> },
+      { path: '/auth', element: <LazyPage><AuthPage /></LazyPage> },
     ],
   },
   {
     path: '/expired',
-    element: <ExpiredLinkPage />,
+    element: <LazyPage><ExpiredLinkPage /></LazyPage>,
   },
   {
     element: <ProtectedRoute />,
     children: [
-      { path: '/dashboard', element: <DashboardPage /> },
+      { path: '/dashboard', element: <LazyPage><DashboardPage /></LazyPage> },
     ],
   },
   {
     path: '/r/:slug',
-    element: <RedirectPage />,
+    element: <LazyPage><RedirectPage /></LazyPage>,
   },
 ])

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { lazy, Suspense, useState, useRef } from 'react'
 import { Copy, Check, QrCode, Trash2, ExternalLink, MousePointerClick, Download, Share2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
@@ -14,10 +14,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { QRCodeCanvas } from 'qrcode.react'
 import { cn, timeFromNow, isExpired } from '@/lib/utils'
 import { useDeleteLink } from '@/features/links/hooks/useDeleteLink'
 import type { Link } from '@/types/link.types'
+
+const QRCodeCanvas = lazy(() =>
+  import('qrcode.react').then((mod) => ({ default: mod.QRCodeCanvas })),
+)
 
 interface LinkCardProps {
   link: Link
@@ -203,7 +206,9 @@ export function LinkCard({ link, shortBaseUrl }: LinkCardProps) {
             <DialogDescription className="text-center">{shortUrl}</DialogDescription>
           </DialogHeader>
           <div ref={qrWrapperRef} className="rounded-xl border border-border bg-white p-4">
-            <QRCodeCanvas value={shortUrl} size={200} bgColor="#ffffff" fgColor="#000000" />
+            <Suspense fallback={<div className="h-[200px] w-[200px] bg-white" />}>
+              <QRCodeCanvas value={shortUrl} size={200} bgColor="#ffffff" fgColor="#000000" />
+            </Suspense>
           </div>
           <DialogFooter className="w-full flex-row justify-center gap-2 sm:justify-center">
             <Button variant="outline" onClick={handleDownloadQr}>
