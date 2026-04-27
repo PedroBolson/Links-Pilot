@@ -1,7 +1,7 @@
 import {onCall, HttpsError} from "firebase-functions/v2/https";
-import {FieldValue} from "firebase-admin/firestore";
 import {db} from "../lib/firestore.js";
 import {auditLog} from "../lib/audit.js";
+import {CALLABLE_CORS, FUNCTION_REGION} from "../lib/http-options.js";
 import type {Link, SlugIndex} from "../types/link.types.js";
 
 const WRITE_BATCH_LIMIT = 400;
@@ -34,7 +34,7 @@ async function deleteClicksForLink(linkId: string): Promise<number> {
 }
 
 export const deleteLink = onCall(
-  {region: "southamerica-east1", cors: true},
+  {region: FUNCTION_REGION, cors: CALLABLE_CORS},
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentication required.");
@@ -67,7 +67,6 @@ export const deleteLink = onCall(
     }
 
     const slugRef = db.collection("slugs").doc(link.slug);
-    const userRef = db.collection("users").doc(uid);
     const slugSnap = await slugRef.get();
     const slug = slugSnap.data() as Partial<SlugIndex> | undefined;
     const shouldDeleteSlug = slugSnap.exists && slug?.linkId === linkId;
@@ -80,7 +79,6 @@ export const deleteLink = onCall(
       }
 
       tx.delete(linkRef);
-      tx.update(userRef, {linkCount: FieldValue.increment(-1)});
     });
 
     auditLog({

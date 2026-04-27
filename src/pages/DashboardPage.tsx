@@ -1,31 +1,44 @@
 import { useMemo, useEffect } from 'react'
-import { Link2, MousePointerClick, Activity } from 'lucide-react'
+import { Link2, MousePointerClick, Activity, Sparkles } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Badge } from '@/components/ui/badge'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { StatsCard } from '@/features/dashboard/components/StatsCard'
 import { LinkCard } from '@/features/links/components/LinkCard'
 import { CreateLinkForm } from '@/features/links/components/CreateLinkForm'
 import { useLinks } from '@/features/links/hooks/useLinks'
+import { useUserProfile } from '@/features/auth/hooks/useUserProfile'
+import { useBillingPlans } from '@/features/billing/hooks/useBillingPlans'
 import { isExpired } from '@/lib/utils'
+import { formatCurrencyCents, isProEntitled } from '@/types/billing.types'
 
 const SHORT_BASE_URL = import.meta.env.VITE_SHORT_BASE_URL ?? 'https://linkspilot.web.app'
 
 export default function DashboardPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { data: links, isLoading, isError } = useLinks()
+  const { data: profile, isLoading: profileLoading } = useUserProfile()
+  const { data: billingPlans } = useBillingPlans()
 
   useEffect(() => { document.title = t('dashboard.pageTitle') }, [t])
 
   const stats = useMemo(() => {
-    if (!links) return { total: 0, active: 0, totalClicks: 0 }
+    if (!links) return { active: 0, totalClicks: 0 }
     return {
-      total: links.length,
       active: links.filter((l) => !isExpired(l.expiresAt)).length,
       totalClicks: links.reduce((acc, l) => acc + l.clickCount, 0),
     }
   }, [links])
+  const hasPro = isProEntitled(profile?.plan, profile?.billingStatus)
+  const freeLimit = billingPlans.free.includedLinksLifetime ?? 10
+  const totalLinksUsed = profile?.linkCount ?? 0
+  const totalLinksValue = hasPro ? totalLinksUsed : `${totalLinksUsed}/${freeLimit}`
+  const proPrice = formatCurrencyCents(billingPlans.pro.monthlyPriceCents, i18n.language)
+  const currentPlanName = hasPro ? billingPlans.pro.name : billingPlans.free.name
+  const proIncluded = billingPlans.pro.includedLinksPerCycle ?? 50
+  const proMaxDays = billingPlans.pro.maxExpirationDays
 
   return (
     <AppLayout>
@@ -39,9 +52,26 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <StatsCard
             label={t('dashboard.totalLinks')}
-            value={stats.total}
+            value={totalLinksValue}
             icon={Link2}
-            loading={isLoading}
+            loading={profileLoading}
+            badge={
+              hasPro ? (
+                <Badge variant="secondary" className="gap-1">
+                  <Sparkles className="h-3 w-3" />
+                  {currentPlanName}
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="gap-1 text-muted-foreground">
+                  {currentPlanName}
+                </Badge>
+              )
+            }
+            description={
+              hasPro
+                ? t('dashboard.proActiveHint', { included: proIncluded, days: proMaxDays })
+                : t('dashboard.proUpgradeHint', { price: proPrice, included: proIncluded })
+            }
           />
           <StatsCard
             label={t('dashboard.activeLinks')}

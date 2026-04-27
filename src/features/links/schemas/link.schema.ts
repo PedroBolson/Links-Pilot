@@ -30,7 +30,7 @@ export const createLinkSchema = z.object({
 
   expiresAt: z
     .date()
-    .min(new Date(), { message: 'Expiration must be in the future' }),
+    .refine((date) => date.getTime() > Date.now(), 'errors.expirationFuture'),
 })
 
 export type CreateLinkFormValues = z.infer<typeof createLinkSchema>

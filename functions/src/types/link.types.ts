@@ -1,4 +1,5 @@
 import type {Timestamp} from "firebase-admin/firestore";
+import type {BillingStatus, UserPlan} from "./billing.types.js";
 
 export type LinkStatus = "active" | "expired"
 
@@ -25,14 +26,11 @@ export interface SlugIndex {
 export interface UserProfile {
   uid: string
   email: string
-  plan: "free" | "pro"
+  plan: UserPlan
+  billingStatus?: BillingStatus
   linkCount: number
+  currentBillingCycleId?: string
 }
-
-export const PLAN_LIMITS: Record<UserProfile["plan"], number> = {
-  free: 10,
-  pro: Infinity,
-};
 
 export const RESERVED_SLUGS = new Set([
   "auth", "dashboard", "expired", "api", "r", "admin",

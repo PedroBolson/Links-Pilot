@@ -54,7 +54,7 @@ Key design goals:
 
 **Production:** [https://linkspilot.web.app](https://linkspilot.web.app)
 
-> Sign in with a Google account to create links. Free plan allows **10 active links** at a time — delete any link to free up a slot.
+> Sign in with a Google account to create links. Free plan allows **10 total lifetime links**.
 
 ---
 
@@ -63,7 +63,7 @@ Key design goals:
 ### 🔗 Link Management
 - Create short links with **auto-generated 7-character slugs** (nanoid) or **custom slugs** (4–20 chars, `[a-zA-Z0-9_-]`)
 - Optional link title for easy identification
-- **Expiration presets**: 1 day, 7 days, 30 days, 90 days
+- **Expiration presets**: 1 day, 7 days, 30 days; 90 days is reserved for Pro accounts
 - Visual expiration highlight with countdown display
 - Reserved slug protection (`auth`, `dashboard`, `r`, `admin`, etc.)
 - Delete links with a confirmation dialog
@@ -97,8 +97,8 @@ Key design goals:
 
 | Plan | Links |
 |------|-------|
-| Free | 10 active links |
-| Pro  | Unlimited |
+| Free | 10 total lifetime links, up to 30-day expiration |
+| Pro  | 50 links/month included, up to 90-day expiration, metered extras |
 
 Enforced server-side in the `createLink` Cloud Function — the client cannot bypass this.
 
@@ -182,6 +182,9 @@ Enforced server-side in the `createLink` Cloud Function — the client cannot by
                 │  - slugs          │
                 │  - users          │
                 │  - clicks         │
+                │  - billingPlans   │
+                │  - billingCycles  │
+                │  - usageEvents    │
                 └───────────────────┘
 
 Separate HTTP trigger (no auth required):
@@ -198,10 +201,13 @@ Separate HTTP trigger (no auth required):
 5. request.auth validated → unauthenticated throws 401
 6. request.data validated by Zod → failure throws 400 with field message
 7. Firestore transaction (atomic):
-   a. Check slug uniqueness in /slugs/{slug}
-   b. Write /links/{linkId}
-   c. Write /slugs/{slug}
-   d. Increment /users/{uid}.linkCount
+   a. Resolve effective plan and validate plan limits
+   b. Check slug uniqueness in /slugs/{slug}
+   c. Write /links/{linkId}
+   d. Write /slugs/{slug}
+   e. Write /usageEvents/{linkId}
+   f. Update /billingCycles/{uid_YYYY-MM} when Pro
+   g. Increment /users/{uid}.linkCount
 8. Returns { linkId, slug, shortUrl }
 9. React Query invalidates ['links'] → dashboard re-fetches automatically
 ```
@@ -326,10 +332,13 @@ linkspilot/
 │       │   ├── slug.ts              # generateSlug() with nanoid
 │       │   ├── validators.ts        # Zod schemas (backend)
 │       │   ├── audit.ts             # Structured audit log emitter (Cloud Logging)
+│       │   ├── billing.ts           # Plan resolution + billing cycle helpers
+│       │   ├── http-options.ts      # Shared callable region/CORS config
 │       │   ├── rate-limiter.ts      # Firestore-based sliding window rate limiter
 │       │   └── safe-browsing.ts     # Google Safe Browsing API v4 client
 │       └── types/
-│           └── link.types.ts        # Types + PLAN_LIMITS + RESERVED_SLUGS
+│           ├── billing.types.ts     # Plan and usage pricing contracts
+│           └── link.types.ts        # Link types + RESERVED_SLUGS
 │
 ├── public/
 │   └── favicon.svg                  # Chain link icon on purple gradient
@@ -503,10 +512,33 @@ interface SlugIndex {
 interface UserProfile {
   email: string
   plan: 'free' | 'pro'
-  linkCount: number    // Maintained with FieldValue.increment (atomic, no race condition)
+  billingStatus: 'none' | 'manual_active' | 'trialing' | 'active' | 'past_due' | 'canceled'
+  linkCount: number    // Lifetime total, maintained with FieldValue.increment
+  currentBillingCycleId?: string | null
   createdAt: Timestamp
 }
 ```
+
+#### `billingPlans` — Public plan configuration
+
+```typescript
+// Document IDs: "free" and "pro". Public read, no client writes.
+interface BillingPlan {
+  id: 'free' | 'pro'
+  monthlyPriceCents: number
+  includedLinksLifetime: number | null
+  includedLinksPerCycle: number | null
+  maxExpirationDays: number
+  allowOverage: boolean
+  overageTiers: Array<{ from: number; to: number | null; priceCents: number }>
+  softLimitLinksPerCycle: number | null
+  hardLimitLinksPerCycle: number | null
+}
+```
+
+#### `billingCycles` / `usageEvents` — Usage ledger
+
+`billingCycles/{uid_YYYY-MM}` stores monthly Pro usage totals. `usageEvents/{linkId}` stores the immutable link-created usage event that produced the cycle increment. Both collections are read-only to the owning user and written only by Cloud Functions.
 
 #### `clicks` — Click analytics
 
@@ -553,7 +585,8 @@ match /links/{linkId} {
   allow write: if false;  // Admin SDK only
 }
 match /slugs/{slug} {
-  allow read:  if request.auth != null;
+  allow get:   if request.auth != null;
+  allow list:  if false;
   allow write: if false;  // Admin SDK only
 }
 match /users/{userId} {
@@ -561,6 +594,18 @@ match /users/{userId} {
   allow write: if false;  // Admin SDK only
 }
 match /clicks/{clickId} {
+  allow read:  if request.auth.uid == resource.data.userId;
+  allow write: if false;  // Admin SDK only
+}
+match /billingPlans/{planId} {
+  allow read:  if true;
+  allow write: if false;  // Console / Admin SDK only
+}
+match /billingCycles/{cycleId} {
+  allow read:  if request.auth.uid == resource.data.userId;
+  allow write: if false;  // Admin SDK only
+}
+match /usageEvents/{eventId} {
   allow read:  if request.auth.uid == resource.data.userId;
   allow write: if false;  // Admin SDK only
 }
@@ -595,7 +640,7 @@ Trigger:      onCall (HTTPS Callable)
 Auth:         Required (unauthenticated → 401)
 Input:        none
 Output:       { created: boolean }
-Side effects: Creates /users/{uid} with { email, plan: 'free', linkCount: 0 }
+Side effects: Creates /users/{uid} with { email, plan: 'free', billingStatus: 'none', linkCount: 0 }
 ```
 
 ### `createLink` — HTTPS Callable
@@ -620,15 +665,18 @@ Security layers (in order):
   1. Auth check          — unauthenticated request rejected immediately
   2. Zod validation      — schema enforced server-side (url, slug, title, expiresAt)
   3. Rate limiting       — Firestore sliding window (free: 20/h, pro: 200/h)
-  4. Plan limit check    — linkCount vs PLAN_LIMITS (free: 10, pro: unlimited)
-  5. Safe Browsing check — Google Safe Browsing API v4 (MALWARE, SOCIAL_ENGINEERING,
+  4. Safe Browsing check — Google Safe Browsing API v4 (MALWARE, SOCIAL_ENGINEERING,
                            UNWANTED_SOFTWARE, POTENTIALLY_HARMFUL_APPLICATION)
-  6. Atomic transaction  — slug uniqueness + link write + linkCount increment
+  5. Effective plan      — Pro only counts when billingStatus is manual_active/trialing/active
+  6. Plan config check   — billingPlans/{plan} or hardened server defaults
+  7. Expiration lock     — free up to 30 days, pro up to 90 days
+  8. Plan limit check    — free linkCount lifetime total; pro monthly included + overage ledger
+  9. Atomic transaction  — slug uniqueness + link write + usage event + linkCount increment
 ```
 
 ### `deleteLink` — HTTPS Callable
 
-Verifies ownership before deletion. Removes click events in bounded batches, deletes the slug only if it still points to the same `linkId`, then deletes the link and decrements the user's link count in a transaction.
+Verifies ownership before deletion. Removes click events in bounded batches, deletes the slug only if it still points to the same `linkId`, then deletes the link. The user's `linkCount` is intentionally not decremented because the free plan is based on total lifetime links, not simultaneous active links.
 
 ```
 Trigger:  onCall (HTTPS Callable)
@@ -647,7 +695,6 @@ Cleanup flow:
   1. Delete /clicks where linkId == input.linkId in batches of 400
   2. Read /slugs/{slug} and only delete it if slug.linkId == input.linkId
   3. Transactionally delete /links/{linkId}
-  4. Transactionally decrement /users/{uid}.linkCount
 ```
 
 ### `redirect` — HTTP Request
@@ -816,12 +863,12 @@ resources: {
 | Client writes directly to Firestore | All writes denied in security rules; only Admin SDK (Cloud Functions) can write |
 | User creates link attributed to another user | `request.auth.uid` is used as `userId` server-side — client cannot override |
 | User deletes another user's link | Ownership verified: `link.userId !== uid` → `permission-denied` |
-| User bypasses plan limits | `linkCount` maintained server-side with atomic `FieldValue.increment`; checked in `createLink` |
+| User bypasses plan limits | Effective plan, lifetime count and Pro usage ledger are checked inside the `createLink` transaction |
 | Slug squatting on reserved paths | `RESERVED_SLUGS` set checked before any slug is written |
 | Open redirect to non-HTTP URLs | `originalUrl` validated: `z.string().url()` + must start with `http://` or `https://` |
 | Link pointing to malware or phishing site | Google Safe Browsing API v4 checks every URL at creation time (MALWARE, SOCIAL_ENGINEERING, UNWANTED_SOFTWARE, POTENTIALLY_HARMFUL_APPLICATION) |
 | Unauthenticated function calls | `if (!request.auth)` guard at the top of every callable function |
-| CORS bypass on Cloud Run | `cors: true` on all callable functions; Firebase handles OPTIONS preflight |
+| CORS bypass on Cloud Run | Callable functions use the shared `CALLABLE_CORS` allowlist instead of open wildcard CORS |
 | XSS via link titles | Titles are rendered as text content, never as HTML |
 | Brute-force / mass link creation | Firestore-based rate limiter: free plan capped at 20 creates/hour, pro at 200/hour |
 | Redirect endpoint flood (DDoS) | In-memory IP rate limiter: 60 requests/minute per IP per Cloud Run instance |
@@ -892,7 +939,7 @@ Server (Cloud Function + Zod):
 - [ ] Custom domain support with CNAME setup guide
 - [ ] Bulk link import via CSV
 - [ ] Password-protected links
-- [ ] Pro plan billing integration (Stripe)
+- [ ] Payment provider integration for Pro activation and overage invoices
 - [ ] REST API access with API key management
 - [ ] Link preview cards (og:image generation via Puppeteer)
 - [x] GitHub Actions Hosting CI/CD pipeline

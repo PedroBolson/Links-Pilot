@@ -1,21 +1,25 @@
 import { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { addDays } from 'date-fns'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
-import { CalendarClock } from 'lucide-react'
+import { CalendarClock, Lock, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { createLinkSchema, type CreateLinkFormValues } from '../schemas/link.schema'
 import { useCreateLink } from '../hooks/useCreateLink'
+import { useUserProfile } from '@/features/auth/hooks/useUserProfile'
+import { useBillingPlans } from '@/features/billing/hooks/useBillingPlans'
 import { cn, formatDate, timeFromNow } from '@/lib/utils'
+import { formatCurrencyCents, isProEntitled } from '@/types/billing.types'
 
 const EXPIRY_PRESETS = [
-  { label: '1d',  days: 1 },
-  { label: '7d',  days: 7 },
+  { label: '1d', days: 1 },
+  { label: '7d', days: 7 },
   { label: '30d', days: 30 },
   { label: '90d', days: 90 },
 ]
@@ -27,13 +31,18 @@ interface CreateLinkFormProps {
 export function CreateLinkForm({ onSuccess }: CreateLinkFormProps) {
   const { t, i18n } = useTranslation()
   const { mutate: createLink, isPending } = useCreateLink()
+  const { data: profile } = useUserProfile()
+  const { data: billingPlans } = useBillingPlans()
   const [selectedPreset, setSelectedPreset] = useState<number>(7)
+  const hasPro = isProEntitled(profile?.plan, profile?.billingStatus)
+  const freeMaxExpirationDays = billingPlans.free.maxExpirationDays
+  const proPrice = formatCurrencyCents(billingPlans.pro.monthlyPriceCents, i18n.language)
 
   const {
     register,
     handleSubmit,
     setValue,
-    watch,
+    control,
     reset,
     formState: { errors },
   } = useForm<CreateLinkFormValues>({
@@ -45,9 +54,18 @@ export function CreateLinkForm({ onSuccess }: CreateLinkFormProps) {
     },
   })
 
-  const expiresAt = watch('expiresAt')
+  const expiresAt = useWatch({ control, name: 'expiresAt' })
+
+  function isPresetLocked(days: number) {
+    return !hasPro && days > freeMaxExpirationDays
+  }
 
   function setPreset(days: number) {
+    if (isPresetLocked(days)) {
+      toast.info(t('billing.proRequired90d', { price: proPrice }))
+      return
+    }
+
     setSelectedPreset(days)
     setValue('expiresAt', addDays(new Date(), days), { shouldValidate: true })
   }
@@ -135,21 +153,33 @@ export function CreateLinkForm({ onSuccess }: CreateLinkFormProps) {
 
             {/* Preset buttons */}
             <div className="flex flex-wrap gap-2">
-              {EXPIRY_PRESETS.map((p) => (
-                <button
-                  key={p.days}
-                  type="button"
-                  onClick={() => setPreset(p.days)}
-                  className={cn(
-                    'rounded-md border px-3 py-1.5 text-sm font-medium transition-colors',
-                    selectedPreset === p.days
-                      ? 'border-primary bg-primary text-primary-foreground'
-                      : 'border-border bg-background text-foreground hover:bg-muted',
-                  )}
-                >
-                  {p.label}
-                </button>
-              ))}
+              {EXPIRY_PRESETS.map((p) => {
+                const locked = isPresetLocked(p.days)
+
+                return (
+                  <button
+                    key={p.days}
+                    type="button"
+                    onClick={() => setPreset(p.days)}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors',
+                      selectedPreset === p.days
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-border bg-background text-foreground hover:bg-muted',
+                      locked && 'border-primary/30 bg-primary/5 text-primary hover:bg-primary/10',
+                    )}
+                  >
+                    {locked && <Lock className="h-3 w-3" />}
+                    {p.label}
+                    {locked && (
+                      <Badge variant="outline" className="h-4 gap-1 px-1 text-[10px]">
+                        <Sparkles className="h-2.5 w-2.5" />
+                        PRO
+                      </Badge>
+                    )}
+                  </button>
+                )
+              })}
             </div>
 
             {/* Selected expiration highlight */}
@@ -169,7 +199,7 @@ export function CreateLinkForm({ onSuccess }: CreateLinkFormProps) {
             </div>
 
             {errors.expiresAt && (
-              <p className="text-xs text-destructive">{errors.expiresAt.message}</p>
+              <p className="text-xs text-destructive">{t(errors.expiresAt.message as string)}</p>
             )}
           </div>
 

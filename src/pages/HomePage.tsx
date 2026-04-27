@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import {
   Link2, Clock, BarChart2, QrCode, ArrowRight, Moon, Sun, Monitor, Globe,
   Loader2, CheckCircle2, Copy, ArrowDown, Zap, Lock,
 } from 'lucide-react'
+import { LegalFooter } from '@/components/shared/LegalFooter'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -377,7 +378,17 @@ export default function HomePage() {
           )}
         </button>
 
-        <p className="mt-4 text-xs text-hero-fg-whisper">{t('home.ctaNote')}</p>
+        <p className="mt-4 text-xs text-hero-fg-muted">{t('home.ctaNote')}</p>
+        <p className="mt-2 text-xs text-hero-fg-muted">
+          {t('legal.signInConsent1')}{' '}
+          <Link to="/terms" className="underline underline-offset-2 transition-colors hover:text-hero-fg">
+            {t('legal.termsOfUse')}
+          </Link>{' '}
+          {t('legal.signInConsent2')}{' '}
+          <Link to="/privacy" className="underline underline-offset-2 transition-colors hover:text-hero-fg">
+            {t('legal.privacyPolicy')}
+          </Link>.
+        </p>
       </section>
 
       {/* ── Features ────────────────────────────────────────────── */}
@@ -407,9 +418,7 @@ export default function HomePage() {
 
       {/* ── Footer ──────────────────────────────────────────────── */}
       <footer className="relative z-10 border-t border-hero-border py-8">
-        <p className="text-center text-xs text-hero-fg-whisper">
-          © {new Date().getFullYear()} Pedro Bolson · LinksPilot · {t('home.footer')}
-        </p>
+        <LegalFooter variant="hero" />
       </footer>
     </div>
   )
