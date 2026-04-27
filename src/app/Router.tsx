@@ -8,8 +8,8 @@ const AuthPage = lazy(() => import('@/pages/AuthPage'))
 const DashboardPage = lazy(() => import('@/pages/DashboardPage'))
 const RedirectPage = lazy(() => import('@/pages/RedirectPage'))
 const ExpiredLinkPage = lazy(() => import('@/pages/ExpiredLinkPage'))
-const TermsPage = lazy(() => import('@/pages/TermsPage'))
-const PrivacyPage = lazy(() => import('@/pages/PrivacyPage'))
+import TermsPage from '@/pages/TermsPage'
+import PrivacyPage from '@/pages/PrivacyPage'
 
 function LazyPage({ children }: { children: ReactNode }) {
   return <Suspense fallback={<FullPageSpinner />}>{children}</Suspense>
@@ -51,11 +51,11 @@ export const router = createBrowserRouter([
   },
   {
     path: '/terms',
-    element: <LazyPage><TermsPage /></LazyPage>,
+    element: <TermsPage />,
   },
   {
     path: '/privacy',
-    element: <LazyPage><PrivacyPage /></LazyPage>,
+    element: <PrivacyPage />,
   },
   {
     element: <ProtectedRoute />,
